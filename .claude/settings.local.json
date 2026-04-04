@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__postgres-woodstock-prod__query",
+      "Bash(duckdb:*)",
+      "Bash(cd:*)",
+      "Bash(pip install:*)"
+    ]
+  }
+}
