@@ -1,4 +1,4 @@
-# CLAUDE.md — Importação SBACEM → Woodstock (Tenant 38 - M360)
+﻿# CLAUDE.md — Importação SBACEM → Woodstock (Tenant 38 - M360)
 
 Contexto de importação de catálogo SBACEM para o banco de produção Woodstock.
 Use este documento para dar continuidade ao trabalho em outra sessão.

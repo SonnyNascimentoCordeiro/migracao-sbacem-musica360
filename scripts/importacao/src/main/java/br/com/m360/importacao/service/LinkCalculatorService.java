@@ -41,6 +41,38 @@ public class LinkCalculatorService {
         return result;
     }
 
+    /**
+     * Retorna todos os links de uma linha.
+     * Editor com chain "E | F" retorna [link_E, link_F].
+     * Autor ou sem par retorna [link_proprio].
+     */
+    public List<Integer> resolverTodosLinks(SbacemRow linha, List<SbacemRow> todas, Map<String, Integer> links) {
+        // Editor com múltiplos chains → um link por alvo
+        if (linha.getChain() != null && !linha.getChain().isBlank()) {
+            List<Integer> result = new ArrayList<>();
+            String[] targets = linha.getChain().split("\\s*\\|\\s*");
+            for (String target : targets) {
+                String pairKey = target.trim() + "::" + linha.getChainId();
+                if (links.containsKey(pairKey)) {
+                    result.add(links.get(pairKey));
+                }
+            }
+            if (!result.isEmpty()) return result;
+        }
+        // Autor (alvo de um editor) → retorna o link do par
+        for (SbacemRow editor : todas) {
+            if (editor.getChain() == null) continue;
+            for (String t : editor.getChain().split("\\s*\\|\\s*")) {
+                if (t.trim().equals(linha.getChainId())) {
+                    String pairKey = linha.getChainId() + "::" + editor.getChainId();
+                    if (links.containsKey(pairKey)) return List.of(links.get(pairKey));
+                }
+            }
+        }
+        // Sem par → link próprio
+        return List.of(links.getOrDefault(linha.getChainId(), 1));
+    }
+
     public int resolverLink(SbacemRow linha, List<SbacemRow> todas, Map<String, Integer> links) {
         // Linha é editor com chain?
         if (linha.getChain() != null && !linha.getChain().isBlank()) {

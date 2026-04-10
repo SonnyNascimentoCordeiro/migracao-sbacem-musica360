@@ -1,0 +1,39 @@
+================================================================================
+MIGRAÇÃO MDB → STAGING (ordem fixa)
+Pasta base: scripts/migracao/
+Não há DELETE em obras/pessoas. Só TRUNCATE/DROP na tabela migracao_stg.sbacem_import_staging.
+================================================================================
+
+OPÇÃO A — UM ARQUIVO (passos 1–8 juntos):
+    migracao_staging_um_arquivo.sql
+
+OPÇÃO B — arquivos separados (mesma ordem que o arquivo único):
+================================================================================
+
+1.  staging\01_staging_tables.sql
+2.  sql\populate_staging_from_sbacem.sql
+3.  ddl\verify_obra_integrante_link.sql
+4.  sql\titular_cessao_unificada.sql
+5.  sql\05_assign_links.sql
+6.  sql\06_staging_titular_nome.sql
+7.  sql\07_cessao_mr_rateio.sql
+8.  sql\08_apply_cessao_cedente.sql
+
+--- OPCIONAL (esqueletos / TODO no SQL) ---
+9.  sql\02_load_pessoas_dedup.sql
+10. sql\03_load_obras.sql
+11. sql\04_load_integrantes_sbacem_base.sql
+12. sql\09_insert_m360_integrantes.sql
+13. sql\10_update_obra_controlada_controle_mr.sql
+
+--- OPCIONAL (conferências) ---
+    sql\validate_links_three_pairs.sql
+    sql\validate_aw0mtyo2.sql
+    reports\chain_dangling_export.sql
+    reports\fallback_empty_chain.sql
+    sql\validate_cardinalidade_fonte_destino.sql
+
+================================================================================
+No DBeaver: abra cada arquivo na ordem e execute (Ctrl+Enter).
+No psql:    veja executar_sequencia.ps1 ou copie os comandos de SEQUENCIA_SQL_CMD.md
+================================================================================

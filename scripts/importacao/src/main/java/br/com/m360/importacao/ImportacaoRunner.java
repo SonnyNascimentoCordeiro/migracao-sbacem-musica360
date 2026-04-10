@@ -24,6 +24,15 @@ public class ImportacaoRunner implements CommandLineRunner {
     public void run(String... args) {
         List<String> argList = Arrays.asList(args);
 
+        // Modo: preview de obra (sem inserir no banco)
+        int previewIdx = argList.indexOf("--preview");
+        if (previewIdx >= 0 && previewIdx + 1 < argList.size()) {
+            String atlasId = argList.get(previewIdx + 1);
+            log.info("Preview da obra: {}", atlasId);
+            importacaoService.previewObra(atlasId);
+            return;
+        }
+
         // Modo: obra específica
         int obraIdx = argList.indexOf("--obra");
         if (obraIdx >= 0 && obraIdx + 1 < argList.size()) {
@@ -56,7 +65,8 @@ public class ImportacaoRunner implements CommandLineRunner {
 
         // Sem argumento
         log.info("Uso:");
-        log.info("  --obra <atlas_id>   Importa uma obra específica para validação");
-        log.info("  --confirm           Importa todas as obras (125k+)");
+        log.info("  --preview <atlas_id>  Mostra como a obra ficará (sem inserir no banco)");
+        log.info("  --obra <atlas_id>     Importa uma obra específica para validação");
+        log.info("  --confirm             Importa todas as obras (125k+)");
     }
 }

@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+
+# Ambiente e relatórios locais
+.env
+scripts/migracao/reports/*.csv
+
+# IDE / SO
+.DS_Store
+Thumbs.db
+*.tmp
+.idea/

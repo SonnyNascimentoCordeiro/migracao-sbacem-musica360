@@ -5,6 +5,7 @@ import br.com.m360.importacao.repository.PessoaRepository;
 import br.com.m360.importacao.repository.SbacemRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
 import java.util.*;
 
 @Slf4j
@@ -28,11 +29,21 @@ public class IntegranteBuilderService {
     public List<IntegranteImportado> construir(List<SbacemRow> linhas) {
         Map<String, Integer> links = linkCalc.calcularLinks(linhas);
         List<IntegranteImportado> resultado = new ArrayList<>();
-        // controle de M360 já inserido por link
-        Set<Integer> linksComM360 = new HashSet<>();
-        Map<Integer, Double> coletaPrPorLink = new HashMap<>();
         int seq = 1;
 
+        // Acumuladores por link
+        Map<Integer, Double> coletaPrPorLink = new HashMap<>();   // soma coleta_pr controlados
+        Map<Integer, Double> mrM360PorLink = new HashMap<>();     // soma mr cedido ao M360
+        Map<Integer, Double> pctTitularPorLink = new HashMap<>(); // % contrato titular (para distribuição)
+        Set<Integer> linksComEditorE = new HashSet<>();
+
+        // Mapa ipiBase → pctTitular para uso no segundo passe
+        Map<Long, Double> pctTitularPorPessoa = new HashMap<>();
+
+        // ====================================================
+        // FASE 1: integrantes base
+        // Editor com chain "E | F" gera UMA linha por alvo (um link por par)
+        // ====================================================
         for (SbacemRow row : linhas) {
             Optional<Long> idPessoa = pessoaRepo.buscarIdPorIpName(row.getIpiNameNumber());
             if (idPessoa.isEmpty()) {
@@ -43,49 +54,66 @@ public class IntegranteBuilderService {
             Optional<TitularRow> titular = sbacemRepo.buscarTitular(row.getIpiBaseNumber());
             double perOwn = parseDouble(row.getPerOwn());
             double mecOwn = parseDouble(row.getMecOwn());
-            double pctTitular = titular.map(t -> {
-                String pct = t.getPercentual() != null ? t.getPercentual().replace("%", "") : "0";
-                return parseDouble(pct);
-            }).orElse(0.0);
+            double pctTitular = titular.map(t ->
+                parseDouble(t.getPercentual() != null ? t.getPercentual().replace("%", "") : "0")
+            ).orElse(0.0);
             boolean controlado = titular.isPresent();
 
-            double mr = controlado
-                ? Math.max(0, mecOwn - Math.min(mecOwn, pctTitular))
-                : mecOwn;
+            double mrTitular = controlado
+                    ? Math.max(0, mecOwn - Math.min(mecOwn, pctTitular))
+                    : mecOwn;
+            double mrCedido = controlado ? Math.min(mecOwn, pctTitular) : 0.0;
 
-            int link = linkCalc.resolverLink(row, linhas, links);
+            // Editor com múltiplos chains → resolver todos os links
+            List<Integer> linksDoRow = linkCalc.resolverTodosLinks(row, linhas, links);
 
-            double coletaPr = controlado ? perOwn : perOwn;
-            if (controlado) {
-                coletaPrPorLink.merge(link, coletaPr, Double::sum);
-            }
+            for (int link : linksDoRow) {
+                if (controlado) {
+                    coletaPrPorLink.merge(link, perOwn, Double::sum);
+                    mrM360PorLink.merge(link, mrCedido, Double::sum);
+                    pctTitularPorLink.merge(link, pctTitular, Double::sum);
+                    pctTitularPorPessoa.put(idPessoa.get(), pctTitular);
+                }
 
-            IntegranteImportado integrante = IntegranteImportado.builder()
-                .idPessoa(idPessoa.get())
-                .codCategoria(row.getIpRole())
-                .controlado(controlado)
-                .percentualPr(perOwn)
-                .percentualMr(mr)
-                .percentualSr(mr)
-                .percentualBase(perOwn)
-                .coletaPr(coletaPr)
-                .coletaMr(0.0)
-                .coletaSr(0.0)
-                .link(link)
-                .sequencia(seq++)
-                .build();
-
-            resultado.add(integrante);
-
-            // Inserir M360 uma vez por link (quando há titular cedente)
-            if (controlado && !linksComM360.contains(link)) {
-                linksComM360.add(link);
-                double mrM360 = Math.min(mecOwn, pctTitular);
-                boolean temENoLink = resultado.stream()
-                    .anyMatch(i -> i.getLink() == link && "E".equals(i.getCodCategoria()) && i.getIdPessoa() != ID_MUSICA_360);
-                String catM360 = temENoLink ? "AM" : "E";
+                if ("E".equals(row.getIpRole()) || "ES".equals(row.getIpRole())) {
+                    linksComEditorE.add(link);
+                }
 
                 resultado.add(IntegranteImportado.builder()
+                        .idPessoa(idPessoa.get())
+                        .codCategoria(row.getIpRole())
+                        .controlado(controlado)
+                        .percentualPr(perOwn)
+                        .percentualMr(mrTitular)
+                        .percentualSr(mrTitular)
+                        .percentualBase(perOwn)
+                        .coletaPr(perOwn)
+                        .coletaMr(0.0)
+                        .coletaSr(0.0)
+                        .fonomecanico(0.0)
+                        .sincronizacao(0.0)
+                        .digital(0.0)
+                        .execucaoPublica(0.0)
+                        .link(link)
+                        .sequencia(seq++)
+                        .build());
+            }
+        }
+
+        // ====================================================
+        // FASE 2: inserir M360 por link
+        // ====================================================
+        Set<Integer> linksComM360 = new HashSet<>();
+        for (Map.Entry<Integer, Double> entry : mrM360PorLink.entrySet()) {
+            int link = entry.getKey();
+            double mrM360 = entry.getValue();
+            if (linksComM360.contains(link)) continue;
+            linksComM360.add(link);
+
+            String catM360 = linksComEditorE.contains(link) ? "AM" : "E";
+            double coletaMrM360 = coletaPrPorLink.getOrDefault(link, 0.0);
+
+            resultado.add(IntegranteImportado.builder()
                     .idPessoa(ID_MUSICA_360)
                     .codCategoria(catM360)
                     .controlado(true)
@@ -94,14 +122,56 @@ public class IntegranteBuilderService {
                     .percentualSr(mrM360)
                     .percentualBase(0.0)
                     .coletaPr(0.0)
-                    .coletaMr(coletaPrPorLink.getOrDefault(link, 0.0))
-                    .coletaSr(coletaPrPorLink.getOrDefault(link, 0.0))
+                    .coletaMr(coletaMrM360)
+                    .coletaSr(coletaMrM360)
+                    .fonomecanico(0.0)  // calculado na fase 3
+                    .sincronizacao(0.0)
+                    .digital(0.0)
+                    .execucaoPublica(0.0)
                     .link(link)
                     .sequencia(seq + 500)
                     .build());
+        }
+
+        // ====================================================
+        // FASE 3: calcular distribuição (fonomecanico + sincronizacao)
+        // controle_mr da obra = soma coleta_mr do M360
+        // ====================================================
+        double controleMrObra = resultado.stream()
+                .filter(i -> i.getIdPessoa() == ID_MUSICA_360)
+                .mapToDouble(IntegranteImportado::getColetaMr)
+                .sum();
+
+        if (controleMrObra > 0) {
+            for (IntegranteImportado i : resultado) {
+                if (i.getIdPessoa() == ID_MUSICA_360) {
+                    // M360: fonomecanico = pct_titular (contrato)
+                    // = coleta_mr do M360 nesse link (já é a soma coleta_pr dos controlados)
+                    double fono = round2(i.getColetaMr());
+                    i.setFonomecanico(fono);
+                    i.setSincronizacao(fono);
+
+                } else if (i.isControlado()) {
+                    // Controlado: fonomecanico = ROUND((percentual_base / controle_mr_obra) * 100 - pct_m360, 2)
+                    double pctM360 = pctTitularPorPessoa.getOrDefault(i.getIdPessoa(), 0.0);
+                    double fono = round2((i.getPercentualBase() / controleMrObra) * 100 - pctM360);
+                    fono = Math.max(0, fono); // nunca negativo
+                    i.setFonomecanico(fono);
+                    i.setSincronizacao(fono);
+                }
+                // não controlados: fonomecanico = 0 (já está)
             }
         }
+
+        // Ordenar por link e sequencia
+        resultado.sort(Comparator.comparingInt(IntegranteImportado::getLink)
+                .thenComparingInt(IntegranteImportado::getSequencia));
+
         return resultado;
+    }
+
+    private double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 
     public static double parseDouble(String valor) {

@@ -4,7 +4,9 @@
       "mcp__postgres-woodstock-prod__query",
       "Bash(duckdb:*)",
       "Bash(cd:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(pwsh -Command \".specify/scripts/powershell/create-new-feature.ps1 -Feature 'eu quero fazer mais uma importacao de obra pegando as obras do mdb.sbacem para obras.obra, temos que saber os percentuais corretos e preencher os links que determinam quem é editado pela editora, vamos precisar adicionar a musica 360 nas obras e temos que olhar na tabela de mdb.titular e mdb.titular2 pq eles sao editador pela 60 entao eles devem ter o mesmo link e a regra de ceder os percentuais, verifica se voce sabe essas regras se precisar posso explicar de novo' -Json -ShortName 'import-works-editor-links' 'Import Works with Editor Links and Percentuals' | ConvertTo-Json -Depth 10\")",
+      "Bash(/c/maven/apache-maven-3.9.6/bin/mvn -q clean compile -DskipTests)"
     ]
   }
 }
