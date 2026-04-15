@@ -69,7 +69,7 @@ pessoas.pessoa.ip_name = mdb.sbacem.ipi_name_number AND id_tenant = 38
 
 ### Regra do `percentual_mr`
 - **Não controlado:** `percentual_mr = mec_own`
-- **Titular cedente:** `percentual_mr = GREATEST(0, mec_own - LEAST(mec_own, pct_titular))`
+- **Titular cedente:** `percentual_mr = GREATEST(0, mec_own - LEAST(mec_own, pct_cessao))` com `pct_cessao` = `titular2.percentual` se preenchido, senão `titular.percentual`
 
 ### Percentuais de coleta
 | Campo | Controlado | Não controlado |
@@ -79,18 +79,19 @@ pessoas.pessoa.ip_name = mdb.sbacem.ipi_name_number AND id_tenant = 38
 | `coleta_sr` | `0` | `0` |
 
 ### Controlado
-- `controlado = true` se o participante está em `mdb.titular`
-- Lookup: `mdb.titular.ipi = mdb.sbacem.ipi_base_number` (LIMIT 1)
+- `controlado = true` se o participante está em `mdb.titular` **ou** em `mdb.titular2`
+- Lookup: `mdb.titular.ipi = mdb.sbacem.ipi_base_number` e/ou `mdb.titular2.ipi` (LIMIT 1 em cada)
 
 ---
 
-## 5. Titular Cedente (`mdb.titular`)
+## 5. Titular Cedente (`mdb.titular` / `mdb.titular2`)
 
-- `mdb.titular.ipi = mdb.sbacem.ipi_base_number` (LIMIT 1)
-- Campo `percentual` é numérico (ex: `"15"` — sem `%`)
-- MR cedido ao M360: `LEAST(mec_own, pct_titular)`
-- MR que sobra ao titular: `GREATEST(0, mec_own - LEAST(mec_own, pct_titular))`
-- Se `mec_own < pct_titular` → titular fica com 0%, M360 leva tudo que tinha
+- `mdb.titular.ipi` ou `mdb.titular2.ipi = mdb.sbacem.ipi_base_number` (LIMIT 1 em cada)
+- Campo `percentual` é numérico (ex: `"15"` — `%` opcional)
+- Para **cessão MR** na importação Java: se `titular2.percentual` estiver preenchido, usa-se ele; senão `titular.percentual`
+- MR cedido ao M360: `LEAST(mec_own, pct_cessao)`
+- MR que sobra ao titular: `GREATEST(0, mec_own - LEAST(mec_own, pct_cessao))`
+- Se `mec_own < pct_cessao` → titular fica com 0%, M360 leva tudo que tinha
 
 ---
 
@@ -108,7 +109,7 @@ pessoas.pessoa.ip_name = mdb.sbacem.ipi_name_number AND id_tenant = 38
 | Campo | Valor |
 |---|---|
 | `percentual_pr` | `0` |
-| `percentual_mr` | `LEAST(mec_own, pct_titular)` (soma se múltiplos cedentes no link) |
+| `percentual_mr` | `LEAST(mec_own, pct_cessao)` com `pct_cessao` = `titular2.percentual` se informado, senão `titular.percentual` (soma se múltiplos cedentes no link) |
 | `percentual_sr` | `= percentual_mr` |
 | `percentual_base` | `0` |
 
@@ -127,27 +128,77 @@ pessoas.pessoa.ip_name = mdb.sbacem.ipi_name_number AND id_tenant = 38
 
 ## 7. Percentuais de Distribuição (fonomecanico + sincronizacao)
 
-> Esses campos refletem como os direitos são distribuídos entre os participantes.
+> Refletem a **distribuição** de direitos (separado de `percentual_*` / cessão **MR** da spec 001).  
+> **`sincronizacao` = `fonomecanico`** (mesmo valor nos dois campos).
 
-### Musica 360 como `E` (controlado é CA/autor)
-- Fonte: `mdb.titular.percentual`
-- Valor direto → `fonomecanico = sincronizacao = pct_titular`
+### Escopo: sempre por `link`
 
-### Musica 360 como `AM` (controlado é E/editora)
-- Fonte: `mdb.titular2.percentual`
-- Valor proporcional: `percentual_base_editora * (pct_titular2 / 100)`
+- Cada `numero_link` / `link` é um grupo editorial próprio.
+- Não se modela obra válida **sem** autor ou editora **controlada** no fluxo de negócio.
+- Não controlados: `fonomecanico = sincronizacao = 0`.
 
-### Controlados (autor ou editora)
+### `mdb.titular` vs `mdb.titular2`
+
+- **`mdb.titular`**: titulares **pessoa física** (PF).
+- **`mdb.titular2`**: titulares **pessoa jurídica** (PJ).
+- Na prática da importação Java: `pessoas.pessoa.tipo` (`F` / `J`) define o eixo do contrato na distribuição: **autor PF** usa **15%** fixo; **autor PJ** usa `mdb.titular2.percentual`; **editora PF** usa `mdb.titular.percentual` (pessoa física também pode ser editora titular); **editora PJ** usa `mdb.titular2.percentual`. Se o percentual de contrato da editora PF não existir em `titular`, cai no **15%** como fallback.
+
+### Papéis (SBACEM `ip_role` → `cod_categoria`)
+
+- **Autor** (15% ou contrato PJ): `CA`, `C`, `A`, `AR`, `SA`, `AD`, `TR`.
+- **Editora / administrador editorial** (`titular` PF ou `titular2` PJ): `E`, `ES`, `AM`, `PA`, `SE`, `AQ`.
+- Outros papéis controlados: `fonomecanico = sincronizacao = 0` na distribuição.
+
+### Fórmulas (base = `percentual_base` = `per_own` da linha naquele `link`)
+
+**Autor controlado, PF (`tipo = F` ou ausente):**
+
+- Parcela para M360: `ROUND(base * 0.15, 2)`
+- `fonomecanico = sincronizacao = ROUND(base - parcela_m360, 2)` (mínimo 0)
+
+**Autor controlado, PJ:**
+
+- `pct = percentual` numérico de `mdb.titular2` para o `ipi_base_number` da linha (`%` opcional no texto).
+- Parcela M360: `ROUND(base * pct / 100, 2)`
+- Remanescente: `ROUND(base - parcela, 2)`
+
+**Editora controlada, PF:**
+
+- `pct = percentual` em `mdb.titular` (IPI base da linha). Se `pct <= 0`, usar **15%** (igual autor PF).
+- Parcela M360: `ROUND(base * pct / 100, 2)` com `pct` já em escala 0–100.
+
+**Editora controlada, PJ:**
+
+- Parcela M360: `ROUND(base * pct_titular2 / 100, 2)` com `pct` vindo de `mdb.titular2`.
+
+### Linha Música 360 (`id_pessoa = 2405890`)
+
+Por **link** onde há integrantes controlados com parcela:
+
 ```
-fonomecanico = sincronizacao = ROUND((percentual_base / controle_mr_obra) * 100 - pct_m360, 2)
+fonomecanico = sincronizacao = SUM(parcelas_m360 dos integrantes controlados daquele link)
 ```
-- Nunca negativo (usar `MAX(0, valor)`)
 
-### Não controlados
-- `fonomecanico = sincronizacao = 0`
+(arredondamento por linha antes da soma; ver testes em `IntegranteBuilderServiceTest`.)
+
+### M360 já existente na obra (reimportação)
+
+- Se `obras.obra.codigo = atlas_id` já existir e `obra_integrante` já tiver **Música 360** (`id_pessoa = 2405890`) naquele **`link`**, a importação **não grava** nova linha M360 nesse link (`omitir_insercao` no modelo Java); o cálculo de distribuição em memória **mantém** uma linha M360 lógica para fechar `fonomecanico` / `sincronizacao`.
+- **Atenção:** reimportar com obra já existente **reinsere** os demais integrantes se o fluxo inserir de novo — limpeza de `obra_integrante` antes da carga é responsabilidade do operador, salvo evolução futura de upsert.
+
+### Exemplos
+
+1. **Um autor controlado PF**, `base = 100` no link: autor `85`, M360 `15`.
+2. **Dois autores PF** no mesmo link, `50` + `50`: cada autor `42,5`; M360 `7,5 + 7,5 = 15`.
+3. **Uma editora PJ** no link, `base = 10`, contrato `titular2 = 60%`: editora `4`, M360 `6`.
+
+### Cessão MR (fase 1) e `titular` / `titular2`
+
+- Percentual de **cessão mecânica** (MR) segue prioridade **`titular2`** quando o campo `percentual` está preenchido; senão **`titular`** (alinhado a `fase3_query4_ajuste_mr_sr.sql`).
 
 ### execucao_publica
-- `0` para todos (M360 não participa de execução pública)
+
+- `0` para todos (M360 não participa de execução pública).
 
 ---
 

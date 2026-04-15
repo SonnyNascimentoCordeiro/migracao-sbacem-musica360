@@ -142,6 +142,8 @@
                     <td class="pct pct-coleta">${fmt(i.coletaMr)}%</td>
                     <td class="pct pct-fono">${fmt(i.fonomecanico)}%</td>
                     <td class="pct pct-fono">${fmt(i.sincronizacao)}%</td>
+                    <td class="pct pct-fono">${fmt(i.digital)}%</td>
+                    <td class="pct pct-fono">${fmt(i.execucaoPublica)}%</td>
                 </tr>
             `).join('');
 
@@ -170,6 +172,8 @@
                                 <th class="pct">Coleta MR%</th>
                                 <th class="pct">Fono%</th>
                                 <th class="pct">Sincro%</th>
+                                <th class="pct">Digital%</th>
+                                <th class="pct">Exec. Pública%</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -181,6 +185,8 @@
                                 <td class="pct">—</td>
                                 <td class="pct">—</td>
                                 <td class="pct">${fmt(totalColetaMr)}%</td>
+                                <td class="pct">—</td>
+                                <td class="pct">—</td>
                                 <td class="pct">—</td>
                                 <td class="pct">—</td>
                             </tr>

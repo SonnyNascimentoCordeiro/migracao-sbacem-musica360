@@ -74,4 +74,23 @@ public class SbacemRepository {
                 })
                 .findFirst());
     }
+
+    /** Titulares pessoa jurídica (contratos específicos em `percentual`). */
+    public Optional<TitularRow> buscarTitular2(String ipiBase) {
+        return jdbi.withHandle(h -> h.createQuery("""
+                SELECT nome, cae, ipi, percentual
+                FROM mdb.titular2
+                WHERE ipi = :ipi LIMIT 1
+                """)
+                .bind("ipi", ipiBase)
+                .map((rs, ctx) -> {
+                    TitularRow row = new TitularRow();
+                    row.setNome(rs.getString("nome"));
+                    row.setCae(rs.getString("cae"));
+                    row.setIpi(rs.getString("ipi"));
+                    row.setPercentual(rs.getString("percentual"));
+                    return row;
+                })
+                .findFirst());
+    }
 }

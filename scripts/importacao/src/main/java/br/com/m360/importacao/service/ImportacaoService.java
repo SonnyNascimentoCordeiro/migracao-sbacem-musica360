@@ -5,10 +5,11 @@ import br.com.m360.importacao.repository.ObraRepository;
 import br.com.m360.importacao.repository.PessoaRepository;
 import br.com.m360.importacao.repository.SbacemRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.jdbi.v3.core.Jdbi;
 import org.springframework.stereotype.Service;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -16,6 +17,8 @@ import java.util.stream.Collectors;
 public class ImportacaoService {
 
     private static final long ID_MUSICA_360 = 2405890L;
+    private static final String NOME_M360_LTDA = "MUSICA 360 LTDA";
+    private static final String NOME_M360_EDITORA_LTDA = "MUSICA 360 EDITORA LTDA";
 
     private final SbacemRepository sbacemRepo;
     private final ObraRepository obraRepo;
@@ -40,7 +43,19 @@ public class ImportacaoService {
         }
 
         SbacemRow primeira = linhas.get(0);
-        List<IntegranteImportado> integrantes = integranteBuilder.construir(linhas);
+        boolean obraTemMusica360NaFonte = contemMusica360NaFonte(linhas);
+        Optional<Long> idObraExistente = obraRepo.buscarIdObraPorCodigo(atlasId);
+        Set<Integer> linksComM360Existente = idObraExistente
+                .map(obraRepo::buscarLinksComMusica360)
+                .orElseGet(Set::of);
+        boolean obraTemMusica360Existente = obraTemMusica360NaFonte || idObraExistente
+                .map(id -> !linksComM360Existente.isEmpty() || obraRepo.existeMusica360EditoraPorIpName(id))
+                .orElse(false);
+        if (obraTemMusica360NaFonte) {
+            log.info("Obra {}: M360 já veio na fonte; será aplicado apenas de-para sem inserção automática da M360.", atlasId);
+        }
+        List<IntegranteImportado> integrantes = integranteBuilder.construir(
+                linhas, linksComM360Existente, obraTemMusica360Existente);
 
         double controleMr = integrantes.stream()
             .filter(i -> i.getIdPessoa() == ID_MUSICA_360)
@@ -90,7 +105,19 @@ public class ImportacaoService {
         }
 
         SbacemRow primeira = linhas.get(0);
-        List<IntegranteImportado> integrantes = integranteBuilder.construir(linhas);
+        boolean obraTemMusica360NaFonte = contemMusica360NaFonte(linhas);
+        Optional<Long> idObraExistente = obraRepo.buscarIdObraPorCodigo(atlasId);
+        Set<Integer> linksComM360Existente = idObraExistente
+                .map(obraRepo::buscarLinksComMusica360)
+                .orElseGet(Set::of);
+        boolean obraTemMusica360Existente = obraTemMusica360NaFonte || idObraExistente
+                .map(id -> !linksComM360Existente.isEmpty() || obraRepo.existeMusica360EditoraPorIpName(id))
+                .orElse(false);
+        if (obraTemMusica360NaFonte) {
+            log.info("Obra {}: M360 já veio na fonte; será aplicado apenas de-para sem inserção automática da M360.", atlasId);
+        }
+        List<IntegranteImportado> integrantes = integranteBuilder.construir(
+                linhas, linksComM360Existente, obraTemMusica360Existente);
 
         ObraImportada obra = ObraImportada.builder()
             .atlasId(atlasId)
@@ -100,10 +127,23 @@ public class ImportacaoService {
             .integrantes(integrantes)
             .build();
 
-        long idObra = obraRepo.inserirObra(obra);
-
-        for (String alt : obra.getTitulosAlternativos()) {
-            obraRepo.inserirTituloAlternativo(idObra, alt);
+        long idObra;
+        if (idObraExistente.isPresent()) {
+            idObra = idObraExistente.get();
+            if (obraTemMusica360NaFonte) {
+                log.info("Obra {} já existe (id={}); de-para da M360 aplicado e sem inserção automática adicional.",
+                        atlasId, idObra);
+            } else if (obraTemMusica360Existente) {
+                log.info("Obra {} já existe (id={}); M360 não será reinserido (detectada por id/nome no banco).",
+                        atlasId, idObra);
+            } else {
+                log.info("Obra {} já existe (id={}); reimportando integrantes.", atlasId, idObra);
+            }
+        } else {
+            idObra = obraRepo.inserirObra(obra);
+            for (String alt : obra.getTitulosAlternativos()) {
+                obraRepo.inserirTituloAlternativo(idObra, alt);
+            }
         }
 
         for (IntegranteImportado i : integrantes) {
@@ -144,5 +184,17 @@ public class ImportacaoService {
         return Arrays.stream(alternateTitles.split("\\|"))
             .map(String::trim).filter(t -> !t.isBlank())
             .collect(Collectors.toList());
+    }
+
+    private boolean contemMusica360NaFonte(List<SbacemRow> linhas) {
+        return linhas.stream().anyMatch(r -> isMusica360Nome(r.getIpName()));
+    }
+
+    private boolean isMusica360Nome(String ipName) {
+        if (ipName == null) {
+            return false;
+        }
+        String normalizado = ipName.trim().toUpperCase();
+        return NOME_M360_LTDA.equals(normalizado) || NOME_M360_EDITORA_LTDA.equals(normalizado);
     }
 }

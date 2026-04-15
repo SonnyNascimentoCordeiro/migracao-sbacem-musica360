@@ -6,6 +6,10 @@ import org.jdbi.v3.core.Jdbi;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public class ObraRepository {
@@ -48,7 +52,53 @@ public class ObraRepository {
                 .execute());
     }
 
+    private static final long ID_MUSICA_360 = 2405890L;
+
+    /** Obra já importada com este {@code codigo} (ex.: {@code atlas_id}). */
+    public Optional<Long> buscarIdObraPorCodigo(String codigo) {
+        return jdbi.withHandle(h -> h.createQuery("""
+                SELECT id FROM obras.obra
+                WHERE codigo = :codigo AND id_tenant = 38
+                LIMIT 1
+                """)
+                .bind("codigo", codigo)
+                .mapTo(Long.class)
+                .findFirst());
+    }
+
+    /** Links em que a obra já tem integrante Música 360 (não inserir duplicata). */
+    public Set<Integer> buscarLinksComMusica360(long idObra) {
+        List<Integer> links = jdbi.withHandle(h -> h.createQuery("""
+                SELECT DISTINCT link FROM obras.obra_integrante
+                WHERE id_obra = :idObra AND id_pessoa = :idM360
+                """)
+                .bind("idObra", idObra)
+                .bind("idM360", ID_MUSICA_360)
+                .mapTo(Integer.class)
+                .list());
+        return new HashSet<>(links);
+    }
+
+    /** Detecta se a obra já possui integrante com {@code ip_name = MUSICA 360 EDITORA LTDA}. */
+    public boolean existeMusica360EditoraPorIpName(long idObra) {
+        return jdbi.withHandle(h -> h.createQuery("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM obras.obra_integrante oi
+                    JOIN pessoas.pessoa p ON p.id = oi.id_pessoa
+                    WHERE oi.id_obra = :idObra
+                      AND upper(trim(coalesce(p.ip_name, ''))) = 'MUSICA 360 EDITORA LTDA'
+                )
+                """)
+                .bind("idObra", idObra)
+                .mapTo(Boolean.class)
+                .one());
+    }
+
     public void inserirIntegrante(long idObra, IntegranteImportado i) {
+        if (i.isOmitirInsercao()) {
+            return;
+        }
         jdbi.withHandle(h -> h.createUpdate("""
                 INSERT INTO obras.obra_integrante (
                     id_obra, id_pessoa, cod_territorio, cod_categoria,

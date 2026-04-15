@@ -23,4 +23,12 @@ public class IntegranteImportado {
     private Double execucaoPublica;
     private int link;
     private int sequencia;
+    /** IPI base da fonte SBACEM — para lookup `mdb.titular` / `mdb.titular2` na distribuição. */
+    private String ipiBaseNumber;
+    /**
+     * Se true, não persiste esta linha no INSERT (ex.: M360 já existe no mesmo {@code link} na obra).
+     * Continua na lista para cálculo de distribuição em memória.
+     */
+    @Builder.Default
+    private boolean omitirInsercao = false;
 }
