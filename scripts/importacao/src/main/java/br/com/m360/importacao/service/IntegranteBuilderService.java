@@ -183,6 +183,36 @@ public class IntegranteBuilderService {
             porLink.computeIfAbsent(i.getLink(), k -> new ArrayList<>()).add(i);
         }
 
+        List<IntegranteImportado> linhasNaoAutomaticas = new ArrayList<>();
+        for (IntegranteImportado i : resultado) {
+            if (!isLinhaM360Automatica(i)) {
+                linhasNaoAutomaticas.add(i);
+            }
+        }
+
+        double somaGlobalControlados = 0.0;
+        for (IntegranteImportado i : linhasNaoAutomaticas) {
+            if (!i.isControlado()) {
+                continue;
+            }
+            somaGlobalControlados += i.getPercentualBase() != null ? i.getPercentualBase() : 0.0;
+        }
+
+        Set<Integer> linksComEditoraControlada = new HashSet<>();
+        for (Map.Entry<Integer, List<IntegranteImportado>> entry : porLink.entrySet()) {
+            int link = entry.getKey();
+            List<IntegranteImportado> bucket = entry.getValue();
+            for (IntegranteImportado i : bucket) {
+                if (isLinhaM360Automatica(i)) {
+                    continue;
+                }
+                if (i.isControlado() && i.getCodCategoria() != null && ROLES_EDITORA.contains(i.getCodCategoria())) {
+                    linksComEditoraControlada.add(link);
+                    break;
+                }
+            }
+        }
+
         for (List<IntegranteImportado> bucket : porLink.values()) {
             IntegranteImportado linhaM360 = null;
             List<IntegranteImportado> demais = new ArrayList<>();
@@ -195,23 +225,8 @@ public class IntegranteBuilderService {
             }
 
             double somaParcelaM360 = 0.0;
-            double somaAutoresControlados = 0.0;
-            double somaEditorasControladas = 0.0;
-
-            for (IntegranteImportado i : demais) {
-                if (!i.isControlado() || i.getCodCategoria() == null) {
-                    continue;
-                }
-                double base = i.getPercentualBase() != null ? i.getPercentualBase() : 0.0;
-                if (ROLES_AUTOR.contains(i.getCodCategoria())) {
-                    somaAutoresControlados += base;
-                } else if (ROLES_EDITORA.contains(i.getCodCategoria())) {
-                    somaEditorasControladas += base;
-                }
-            }
-
-            boolean linkMistoAutorEditora = somaAutoresControlados > 0.0 && somaEditorasControladas > 0.0;
-            double somaBasesControladas = somaAutoresControlados + somaEditorasControladas;
+            int link = bucket.get(0).getLink();
+            boolean linkMistoAutorEditora = linksComEditoraControlada.contains(link);
 
             for (IntegranteImportado i : demais) {
                 if (!i.isControlado()) {
@@ -222,7 +237,7 @@ public class IntegranteBuilderService {
 
                 String role = i.getCodCategoria();
                 double base = i.getPercentualBase() != null ? i.getPercentualBase() : 0.0;
-                double baseDistribuicao = somaBasesControladas > 0.0 ? (base / somaBasesControladas) * 100.0 : 0.0;
+                double baseDistribuicao = somaGlobalControlados > 0.0 ? (base / somaGlobalControlados) * 100.0 : 0.0;
 
                 double parcelaM360;
                 double fono;

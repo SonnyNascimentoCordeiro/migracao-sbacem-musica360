@@ -127,7 +127,13 @@
 
             const totalPr = data.integrantes.reduce((s, i) => s + (i.percentualPr || 0), 0);
             const totalMr = data.integrantes.reduce((s, i) => s + (i.percentualMr || 0), 0);
+            const totalSr = data.integrantes.reduce((s, i) => s + (i.percentualSr || 0), 0);
+            const totalColetaPr = data.integrantes.reduce((s, i) => s + (i.coletaPr || 0), 0);
             const totalColetaMr = data.integrantes.reduce((s, i) => s + (i.coletaMr || 0), 0);
+            const totalFono = data.integrantes.reduce((s, i) => s + (i.fonomecanico || 0), 0);
+            const totalSincro = data.integrantes.reduce((s, i) => s + (i.sincronizacao || 0), 0);
+            const totalDigital = data.integrantes.reduce((s, i) => s + (i.digital || 0), 0);
+            const totalExecucaoPublica = data.integrantes.reduce((s, i) => s + (i.execucaoPublica || 0), 0);
 
             const rows = data.integrantes.map(i => `
                 <tr>
@@ -182,13 +188,13 @@
                                 <td colspan="4">TOTAL</td>
                                 <td class="pct">${fmt(totalPr)}%</td>
                                 <td class="pct">${fmt(totalMr)}%</td>
-                                <td class="pct">—</td>
-                                <td class="pct">—</td>
+                                <td class="pct">${fmt(totalSr)}%</td>
+                                <td class="pct">${fmt(totalColetaPr)}%</td>
                                 <td class="pct">${fmt(totalColetaMr)}%</td>
-                                <td class="pct">—</td>
-                                <td class="pct">—</td>
-                                <td class="pct">—</td>
-                                <td class="pct">—</td>
+                                <td class="pct">${fmt(totalFono)}%</td>
+                                <td class="pct">${fmt(totalSincro)}%</td>
+                                <td class="pct">${fmt(totalDigital)}%</td>
+                                <td class="pct">${fmt(totalExecucaoPublica)}%</td>
                             </tr>
                         </tbody>
                     </table>
